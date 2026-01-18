@@ -37,6 +37,7 @@ namespace UnityEssentials.Samples
         {
             Apply(Graphics.GetOrLoad());
             Graphics.Changed += Apply;
+            GraphicsManager.GetCurrentProfile().Changed += Apply;
         }
 
         private static void UseTypedProfileManager()
