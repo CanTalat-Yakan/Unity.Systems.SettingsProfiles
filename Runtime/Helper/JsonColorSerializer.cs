@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace UnityEssentials
 {
-    public class UnityColorJsonConverter : JsonConverter<Color>
+    public class JsonColorSerializer : JsonConverter<Color>
     {
         public override void WriteJson(JsonWriter writer, Color value, JsonSerializer serializer)
         {
@@ -32,7 +32,7 @@ namespace UnityEssentials
             {
                 try
                 {
-                    var color = JsonConvert.DeserializeObject<Color>(colorString, new UnityColorJsonConverter());
+                    var color = JsonConvert.DeserializeObject<Color>(colorString, new JsonColorSerializer());
                     return (T)(object)color;
                 }
                 catch { return defaultValue; }

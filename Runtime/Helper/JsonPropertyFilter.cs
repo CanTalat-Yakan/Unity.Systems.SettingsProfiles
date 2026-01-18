@@ -6,7 +6,7 @@ using Newtonsoft.Json.Serialization;
 
 namespace UnityEssentials
 {
-    public class IgnoreUnityObjectContractResolver : DefaultContractResolver
+    public class JsonPropertyFilter : DefaultContractResolver
     {
         protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
         {
