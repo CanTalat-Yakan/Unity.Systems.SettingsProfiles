@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UnityEssentials
 {
-    public class SettingsProfle
+    public class SettingsProfile
     {
         
     }
