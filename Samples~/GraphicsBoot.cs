@@ -11,10 +11,10 @@ namespace UnityEssentials.Samples
         public static readonly SettingsProfileManager<GraphicsSettings> GraphicsManager =
             SettingsProfileFactory.CreateManager("GraphicsManager", () => new GraphicsSettings());
 
-        public static readonly SettingsProfile<KeyValuePair> GraphicsKvp =
+        public static readonly SettingsProfile GraphicsKvp =
             SettingsProfileFactory.Create("GraphicsKvp");
 
-        public static readonly SettingsProfileManager<KeyValuePair> GraphicsKvpManager =
+        public static readonly SettingsProfileManager GraphicsKvpManager =
             SettingsProfileFactory.CreateManager("GraphicsKvpManager");
 
         private void Awake()

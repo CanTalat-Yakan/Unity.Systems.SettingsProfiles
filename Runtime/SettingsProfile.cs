@@ -1,8 +1,19 @@
 using System;
+using Newtonsoft.Json.Linq;
 
 namespace UnityEssentials
 {
-    public sealed class SettingsProfile<T> where T : new()
+    public sealed class SettingsProfile : SettingsProfile<SerializedDictionary<string, JToken>>
+    {
+        public SettingsProfile(string profileName) : base(profileName, () => new SerializedDictionary<string, JToken>())
+        {
+        }
+        
+        public SerializedDictionary<string, JToken> GetOrLoad() =>
+            base.GetOrLoad();
+    }
+        
+    public class SettingsProfile<T> where T : new()
     {
         public string ProfileName { get; }
         public T Value => _value;
@@ -10,6 +21,7 @@ namespace UnityEssentials
         public bool IsDirty => _dirty;
 
         public event Action<T> Changed;
+        public event Action<string> OnValueChanged;
 
         private readonly Func<T> _defaultsFactory;
         private readonly string _path;
@@ -25,14 +37,10 @@ namespace UnityEssentials
             _path = SettingsPath.GetPath<T>(ProfileName);
         }
 
-        public T GetOrLoad()
-        {
-            if (_loaded) return _value;
-            Load();
-            return _value;
-        }
+        public T GetOrLoad() =>
+            _loaded ? _value : Load();
 
-        public void Load()
+        public T Load()
         {
             _value = _defaultsFactory();
             ApplyValidationAndMigration(_value, null);
@@ -69,6 +77,8 @@ namespace UnityEssentials
 
             _loaded = true;
             _dirty = dirty;
+            
+            return _value;
         }
 
         public void Set(T newValue, bool markDirty = true, bool notify = true)

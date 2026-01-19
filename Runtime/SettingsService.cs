@@ -8,10 +8,10 @@ namespace UnityEssentials
     /// </summary>
     public static class SettingsService
     {
-        private static SettingsProfile<KeyValuePair> _profile;
+        private static SettingsProfile _profile;
 
         /// <summary>The active profile instance (loads on first access).</summary>
-        public static SettingsProfile<KeyValuePair> Profile => _profile ??= CreateAndLoad("Default");
+        public static SettingsProfile Profile => _profile ??= CreateAndLoad("Default");
 
         /// <summary>
         /// Ensures settings are loaded before the first scene.
@@ -45,7 +45,7 @@ namespace UnityEssentials
         public static void Save() =>
             _profile?.Save();
 
-        private static SettingsProfile<KeyValuePair> CreateAndLoad(string profileName)
+        private static SettingsProfile CreateAndLoad(string profileName)
         {
             var profile = SettingsProfileFactory.Create(profileName);
             profile.Load();
