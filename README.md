@@ -26,46 +26,59 @@ Install the Unity Essentials entry package via Unity's Package Manager, then ins
 
 # Settings Profile
 
-> Quick overview: Lightweight, versioned settings profiles backed by JSON files. Define strongly‑typed settings classes, load and mutate them via `SettingsProfile<T>`, and optionally manage multiple named profiles with `SettingsProfileManager<T>` and global key/value helpers.
+> Quick overview: Lightweight, versioned settings profiles backed by JSON files. Use `SettingsProfile<T>` for strongly-typed settings, or `SettingsProfile`/`SettingsProfileBase` for flexible key/value storage.
 
-This module provides a small, runtime-only settings system built on top of plain C# types. A `SettingsProfile<T>` wraps a settings object, handles JSON persistence, and optionally supports schema versioning, validation, and migration through simple interfaces. Profiles are stored as JSON files next to your project and can be switched or managed via a `SettingsProfileManager<T>` for scenarios like per-player or per-environment settings.
+This module provides a small settings system built on top of plain C# types.
 
-A sample (`GraphicsBoot`) shows how to use typed graphics settings, a manager for multiple profiles (e.g., `Default`, `Player2`), and a key/value style profile for flexible storage.
+- **Typed profiles**: `SettingsProfile<T>` wraps a settings object, loads/saves JSON, and supports optional schema versioning, validation, and migration via the interfaces below.
+- **Key/value profiles**: `SettingsProfile` is a convenience wrapper around `SettingsProfile<SettingsProfileBase>`, where `SettingsProfileBase` is a `SerializedDictionary<string, JToken>` with PlayerPrefs-like extension helpers.
+- **Profile managers**: `SettingsProfileManager<T>` and `SettingsProfileManager` help you keep multiple named profiles and switch a “current” profile.
 
 ## Features
-- Strongly-typed settings profiles
-  - `SettingsProfile<T>` wraps a plain C# settings type (e.g., `GraphicsSettings`)
-  - Lazy loading via `GetOrLoad()`; direct mutation with `Set(...)` or `Mutate(...)`
+
+- Strongly-typed profiles (`SettingsProfile<T>`)
+  - Lazy load via `Value` (read intent) or `GetValue()` (write intent)
+  - Manual persistence via `Save()` / `SaveIfDirty()`
+  - Reset and delete helpers: `ResetToDefaults(...)`, `DeleteFile()`
 - JSON persistence
-  - Profiles are stored as JSON files under a simple `Resources`-adjacent folder
-  - `Save()` and `SaveIfDirty()` write changes atomically via `SettingsJsonStore`
+  - Each profile is stored as a `*.json` file
+  - Writes are atomic via `SettingsJsonStore.WriteAllTextAtomic`
 - Change notifications
-  - `Changed` event on `SettingsProfile<T>` fires when the value is updated (e.g., `Mutate`, `Set`, `ResetToDefaults`)
-  - Ideal for applying settings to Unity systems (e.g., `QualitySettings`, audio, input)
-- Versioning, validation and migration
-  - Optional interfaces on your settings type:
-    - `ISettingsVersioned` to expose a `SchemaVersion`
-    - `ISettingsValidate` to clamp or normalize values after load or mutation
-    - `ISettingsMigrate` to handle schema changes between saved versions
-  - `SettingsEnvelope<T>` records type, profile name, schema version and last update time
-- Multiple profiles via managers (pattern)
-  - `SettingsProfileManager<T>` (see sample) manages multiple named profiles (e.g., `Default`, `Player2`)
-  - Switch the current profile and work with it as a regular `SettingsProfile<T>`
+  - `OnChanged` event fires when the profile is changed via `GetValue(...)` (or when a dictionary value changes)
+- Versioning, validation, migration (optional)
+  - `ISettingsVersioned` for `SchemaVersion`
+  - `ISettingsValidate` for clamping/normalization
+  - `ISettingsMigrate` for upgrades from older schema versions
+- Multiple profiles (pattern)
+  - `SettingsProfileManager<T>` / `SettingsProfileManager` choose and cache named profiles and track a `CurrentProfileName`
 - Key/value style settings
-  - Key/value settings (e.g., `KeyValuePair` in the sample) support flexible storage when you don’t want a fixed schema
-  - Access helpers like `GetInt`, `GetBool`, `GetFloat` (see `GraphicsBoot` sample usage)
-- Global settings service integration
-  - Sample shows how to mix Unity’s `SettingsService` with typed profiles to keep a global/system-wide view in sync
+  - For `SettingsProfile` / `SettingsProfileBase` you can store arbitrary values by string key
+  - Helpers: `GetInt`, `GetBool`, `GetFloat`, `GetString`, `SetInt`, `SetBool`, `SetFloat`, `SetString`, etc.
 
 ## Requirements
+
 - Unity 6000.0+
-- Runtime module; no external package dependencies
-- A serializable settings type `T` with a public parameterless constructor (`where T : new()`)
-- Write access to the project folder to create/update JSON files for profiles
+- Runtime module; no external package dependencies beyond what ships with the repo
+- For typed profiles: a settings type `T` with a public parameterless constructor (`where T : new()`)
+- Write access to the project folder (profiles are written to disk)
+
+## Core Concepts / API Contract
+
+- **`Value` (read-intent)**
+  - Ensures the profile is loaded.
+  - For reference types, avoid mutating from `Value` directly unless the type emits change notifications (like `SerializedDictionary`).
+- **`GetValue(markDirty = true, notify = true)` (write-intent)**
+  - Ensures the profile is loaded.
+  - Marks the profile dirty and can invoke `OnChanged` immediately.
+  - Use this for typed settings objects where mutations can’t be detected automatically.
+- **Dirty flag**
+  - `IsDirty` is set when you write via `GetValue()`.
+  - For key/value profiles, `IsDirty` is also set automatically when the underlying dictionary changes.
 
 ## Usage
 
-### 1) Define a settings type
+### 1) Define a settings type (optional versioning/migration/validation)
+
 Create a simple C# class to hold your settings. Implement optional interfaces for versioning, validation, and migration.
 
 ```csharp
@@ -96,7 +109,6 @@ public sealed class GraphicsSettings : ISettingsVersioned, ISettingsValidate, IS
     {
         if (fromVersion < 2)
         {
-            // v1 had no anisotropicFiltering; choose a conservative default
             anisotropicFiltering = 8;
             return true;
         }
@@ -105,8 +117,9 @@ public sealed class GraphicsSettings : ISettingsVersioned, ISettingsValidate, IS
 }
 ```
 
-### 2) Create a typed profile
-Create a static `SettingsProfile<T>` and use it to load, observe, and mutate your settings.
+### 2) Create and use a typed profile
+
+Use a static `SettingsProfile<T>` for a single named JSON-backed settings object.
 
 ```csharp
 using UnityEngine;
@@ -119,11 +132,14 @@ public class GraphicsBoot : MonoBehaviour
 
     private void Awake()
     {
-        // Load and apply once
-        Apply(Graphics.GetOrLoad());
+        // Read (loads on demand)
+        Apply(Graphics.Value);
 
-        // React to changes
-        Graphics.Changed += Apply;
+        // React to changes (triggered by GetValue(...) calls)
+        Graphics.OnChanged += Apply;
+
+        // Write-intent: mark dirty + notify
+        Graphics.GetValue().msaa = 4;
     }
 
     private void OnApplicationQuit()
@@ -138,10 +154,12 @@ public class GraphicsBoot : MonoBehaviour
 }
 ```
 
-### 3) Use a profile manager for multiple named profiles
-Use `SettingsProfileManager<T>` (see sample) to manage multiple profiles such as `Default`, `Player2`, or different environments.
+### 3) Manage multiple named typed profiles with a manager
+
+Use `SettingsProfileManager<T>` for cases like per-player or per-environment settings.
 
 ```csharp
+using UnityEngine;
 using UnityEssentials;
 
 public class GraphicsBoot : MonoBehaviour
@@ -151,14 +169,16 @@ public class GraphicsBoot : MonoBehaviour
 
     private void Awake()
     {
-        // Switch to a named profile and load it
         GraphicsManager.SetCurrentProfile("Player2", loadIfNeeded: true);
+        var profile = GraphicsManager.GetCurrentProfile();
 
-        var current = GraphicsManager.GetCurrentProfile();
-        var g = current.GetOrLoad();
+        // Read
+        var msaa = profile.Value.msaa;
 
-        // Mutate and save later
-        current.Mutate(s => s.msaa = g.msaa, notify: false);
+        // Write-intent
+        profile.GetValue().msaa = msaa;
+
+        profile.OnChanged += g => QualitySettings.antiAliasing = g.msaa;
     }
 
     private void OnApplicationQuit()
@@ -168,88 +188,114 @@ public class GraphicsBoot : MonoBehaviour
 }
 ```
 
-### 4) Key/value style profiles
-For very dynamic settings, use a key/value profile (see `GraphicsBoot` sample) instead of a fixed schema.
+### 4) Key/value style profiles (flexible storage)
+
+If you don’t want a fixed schema, use `SettingsProfile` (dictionary-based). Under the hood it uses a `SerializedDictionary<string, JToken>`.
 
 ```csharp
+using UnityEngine;
 using UnityEssentials;
 
 public class GraphicsBoot : MonoBehaviour
 {
-    public static readonly SettingsProfile<KeyValuePair> GraphicsKvp =
-        SettingsProfileFactory.Create("GraphicsKvp");
+    public static readonly SettingsProfile GraphicsDict =
+        SettingsProfileFactory.Create("GraphicsDict");
 
-    private void UseKeyValueProfile()
+    private void Awake()
     {
-        var kv = GraphicsKvp.GetOrLoad();
+        var profile = GraphicsDict;
 
-        var windowMode  = kv.GetInt("window_mode", 3);
-        var vSync       = kv.GetBool("v-sync");
-        var masterVol   = kv.GetFloat("master_volume", 100f);
+        // Read
+        var windowMode = profile.Value.Get("window_mode", 3);
+        var vSync = profile.Value.Get("v-sync", false);
+        var masterVolume = profile.Value.Get("master_volume", 100f);
 
-        GraphicsKvp.Mutate(s =>
+        // Write
+        profile.Value.SetInt("window_mode", windowMode);
+        profile.Value.SetBool("v-sync", vSync);
+        profile.Value.SetFloat("master_volume", masterVolume);
+
+        // Fine-grained: listen for changes on a specific key
+        profile.Value.OnValueChanged += key =>
         {
-            s.SetInt("window_mode", windowMode);
-            s.SetBool("v-sync", vSync);
-            s.SetFloat("master_volume", masterVol);
-        }, notify: false);
+            if (key == "window_mode")
+                ApplyWindowMode(profile.Value.Get(key, 0));
+        };
+    }
+
+    private static void ApplyWindowMode(int mode)
+    {
+        // Apply window mode logic here
     }
 }
 ```
 
-### 5) Persistence and saving
-Settings profiles track a dirty flag. Use `SaveIfDirty()` to avoid redundant writes or `Save()` to force a write.
+### 5) Key/value profile manager
 
 ```csharp
-// Mark profile dirty via Mutate or Set
-Graphics.Mutate(g => g.msaa = 4);
+using UnityEssentials;
 
-// Later, typically on shutdown or at checkpoints
-Graphics.SaveIfDirty();
+public class GraphicsBoot
+{
+    public static readonly SettingsProfileManager GraphicsDictManager =
+        SettingsProfileFactory.CreateManager("GraphicsDictManager");
+
+    private void UseValueProfileManager()
+    {
+        GraphicsDictManager.SetCurrentProfile("Player2", loadIfNeeded: true);
+        var profile = GraphicsDictManager.GetCurrentProfile();
+
+        var volume = profile.Value.GetFloat("master_volume", 80f);
+        profile.Value.SetFloat("master_volume", volume);
+    }
+}
 ```
 
-## How It Works
-- Data model
-  - `SettingsProfile<T>` holds the current settings value, dirty/loaded flags, and a JSON file path
-  - `SettingsEnvelope<T>` wraps the data with metadata (type name, profile name, schema version, updated timestamp)
-- File layout
-  - `SettingsPath.GetPath<T>(profile)` builds a path under a `Resources`-adjacent folder next to your project
-  - File names are sanitized (invalid characters replaced, empty names mapped to `Default`)
-- Loading
-  - On `GetOrLoad`/`Load`, a default instance is created via the provided factory
-  - If a JSON file exists, it is read and deserialized into a `SettingsEnvelope<T>`
-  - If the envelope or data is missing or invalid, defaults are kept and the profile is marked dirty
-- Validation and migration
-  - After load or mutation, `ApplyValidationAndMigration` is run:
-    - If `T` implements `ISettingsMigrate`, `TryMigrate(fromVersion)` is called with the previous schema version
-    - If `T` implements `ISettingsValidate`, `Validate()` is called to clamp/normalize values
-- Saving
-  - `Save` serializes the current value into a `SettingsEnvelope<T>` using `SettingsJson` and writes it with `SettingsJsonStore.WriteAllTextAtomic`
-  - `SaveIfDirty` writes only when changes have been made
-- Deletion and reset
-  - `ResetToDefaults` recreates the settings from the defaults factory, marks them dirty, and optionally saves immediately
-  - `DeleteFile` removes the JSON file on disk and clears the loaded/dirty flags
+## Persistence / File Location
 
-## Notes and Limitations
-- Threading
-  - Intended for main-thread use; do not mutate settings from background threads
-- Lifetime
-  - `SettingsProfile<T>` instances are regular C# objects; you control when they are created and when to call `Save`/`SaveIfDirty`
-  - Profiles do not auto-save; you must decide when to persist changes (e.g., on application quit or at checkpoints)
-- Error handling
-  - If a profile file is missing, invalid, or fails to deserialize, defaults are used and the profile is marked dirty
-  - Migration failures are ignored beyond the settings type’s own logic; you can enforce stricter behavior in your implementation
-- Scope
-  - Files are written next to your project; this is not a cloud or remote config system
-  - Key/value helpers are suitable for simple settings; prefer strongly-typed settings classes for complex data
+Profiles are stored as JSON files at:
+
+- `Path.Combine(Application.dataPath, "..", "Resources", "{ProfileName}.json")`
+
+This means profiles are created in a project-level `Resources` folder next to your `Assets` folder.
+
+> Note: this is **project-folder storage**, not `Application.persistentDataPath`. It’s intended for editor/dev workflows and for cases where the project directory is writable.
+
+## How Versioning / Migration Works
+
+- On **load**:
+  - Defaults are created.
+  - If a file exists, it’s deserialized as a `SettingsEnvelope<T>`.
+  - If `T : ISettingsMigrate` and the file provides a `schemaVersion`, `TryMigrate(fromVersion)` is called.
+  - If `T : ISettingsValidate`, `Validate()` is called.
+- On **save**:
+  - If `T : ISettingsVersioned`, the current `SchemaVersion` is written into the envelope.
+
+Envelope fields:
+- `type`: `typeof(T).Name`
+- `profile`: profile name
+- `schemaVersion`: integer schema version (0 if not versioned)
+- `updatedUtc`: ISO-8601 timestamp (`DateTime.UtcNow.ToString("O")`)
+- `data`: the settings object
+
+## Notes / Gotchas
+
+- Profiles don’t auto-save. Call `Save()` or `SaveIfDirty()` at a time you control (often `OnApplicationQuit`).
+- For typed profiles, `OnChanged` is triggered by `GetValue(...)` and by `ResetToDefaults(...)` when `notify = true`.
+- For key/value profiles, `IsDirty` / `OnChanged` are also updated when the underlying dictionary emits `OnValueChanged`.
+- `ISettingsValidate.Validate()` may throw to signal unrecoverable invalid state.
 
 ## Files in This Package
-- `Runtime/SettingsProfile.cs` – Core generic profile wrapper for strongly-typed settings
-- `Runtime/SettingsEnvelope.cs` – Serializable envelope used for JSON storage with metadata
-- `Runtime/SettingsPath.cs` – Utility for building safe file paths for profile JSON files
-- `Runtime/UnityEssentials.SettingsProfile.asmdef` – Runtime assembly definition
-- `Samples~/GraphicsBoot.cs` – Example usage of typed, manager, and key/value settings profiles
-- `Editor/UnityEssentials.SettingsProfile.Editor.asmdef` – Editor assembly definition (for future/editor utilities)
+
+- `Runtime/SettingsProfile.cs` – Core profile wrapper (`SettingsProfile<T>` + `SettingsProfile` convenience type)
+- `Runtime/SettingsProfileManager.cs` – Managers for switching between named profiles
+- `Runtime/SettingsProfileFactory.cs` – Central creation helpers
+- `Runtime/SettingsEnvelope.cs` – JSON envelope with metadata
+- `Runtime/SettingsPath.cs` – Path builder (`Assets/../Resources/{Profile}.json`)
+- `Runtime/SettingsJson.cs` – Shared Json.NET settings for profiles
+- `Runtime/SettingsJsonStore.cs` – Atomic file IO utilities
+- `Samples/GraphicsBoot.cs` – Example usage (typed, managers, and key/value)
 
 ## Tags
-unity, settings, configuration, profiles, json, scriptable, runtime, environment, graphics, players
+
+unity, settings, configuration, profiles, json, runtime, environment
