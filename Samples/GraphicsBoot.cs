@@ -5,17 +5,10 @@ namespace UnityEssentials.Samples
 {
     public class GraphicsBoot : MonoBehaviour
     {
-        public static readonly SettingsProfile<GraphicsSettings> Graphics =
-            SettingsProfileFactory.Create("Graphics", () => new GraphicsSettings());
-
-        public static readonly SettingsProfileManager<GraphicsSettings> GraphicsManager =
-            SettingsProfileFactory.CreateManager("GraphicsManager", () => new GraphicsSettings());
-
-        public static readonly SettingsProfile GraphicsDict =
-            SettingsProfileFactory.Create("GraphicsDict");
-
-        public static readonly SettingsProfileManager GraphicsDictManager =
-            SettingsProfileFactory.CreateManager("GraphicsDictManager");
+        public static readonly SettingsProfile<GraphicsSettings> Graphics = new("Graphics");
+        public static readonly SettingsProfileManager<GraphicsSettings> GraphicsManager = new("GraphicsManager");
+        public static readonly SettingsProfile GraphicsDict = new("GraphicsDict");
+        public static readonly SettingsProfileManager GraphicsDictManager = new("GraphicsDictManager");
 
         private void Awake()
         {
@@ -68,7 +61,7 @@ namespace UnityEssentials.Samples
 
         private static void UseValueProfileManager()
         {
-            GraphicsDictManager.SetCurrentProfile("Player2", loadIfNeeded: true);
+            GraphicsDictManager.SetCurrentProfile("Player2");
             var profile = GraphicsDictManager.GetCurrentProfile();
             
             var volume = profile.Value.GetFloat("master_volume", 80f);

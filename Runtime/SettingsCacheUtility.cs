@@ -8,7 +8,7 @@ namespace UnityEssentials
     /// Provides methods for creating, sanitizing, and managing cache entries to minimize redundant computations
     /// when working with profile-related operations.
     /// </summary>
-    internal static class SettingsProfileCacheUtility
+    internal static class SettingsCacheUtility
     {
         internal readonly struct CacheKey : IEquatable<CacheKey>
         {

@@ -12,22 +12,20 @@ namespace UnityEssentials
     {
         private readonly SettingsProfileManagerBase<SettingsProfile> _base;
 
-        public string CurrentProfileName => _base.CurrentProfileName;
+        public static SettingsProfileManager GetOrCreate(string name = "Default") =>
+            SettingsProfileRegistry.GetOrCreate(name, n => new SettingsProfileManager(n));
 
-        public SettingsProfileManager(string profileName) =>
-            _base = new SettingsProfileManagerBase<SettingsProfile>(profileName, name => new SettingsProfile(name));
+        public SettingsProfileManager(string name) =>
+            _base = new SettingsProfileManagerBase<SettingsProfile>(name, n => new SettingsProfile(n));
 
-        public SettingsProfile GetProfile(string profileName) =>
-            _base.GetProfile(profileName);
+        public SettingsProfile GetProfile(string name) =>
+            _base.GetProfile(name);
 
         public SettingsProfile GetCurrentProfile() =>
             _base.GetCurrentProfile();
 
-        public void SetCurrentProfile(string profileName, bool loadIfNeeded = true) =>
-            _base.SetCurrentProfile(
-                profileName,
-                loadIfNeeded,
-                p => p.GetOrLoad());
+        public void SetCurrentProfile(string name, bool load = true) =>
+            _base.SetCurrentProfile(name, load, p => p.Load());
     }
 
     /// <summary>
@@ -36,28 +34,21 @@ namespace UnityEssentials
     public sealed class SettingsProfileManager<T> where T : new()
     {
         private readonly SettingsProfileManagerBase<SettingsProfile<T>> _base;
-        private readonly Func<T> _defaultsFactory;
 
-        public string CurrentProfileName => _base.CurrentProfileName;
+        public static SettingsProfileManager<T> GetOrCreate(string name = "Default") =>
+            SettingsProfileRegistry.GetOrCreate(name, n => new SettingsProfileManager<T>(n));
 
-        public SettingsProfileManager(string profileName, Func<T> defaultsFactory = null)
-        {
-            _defaultsFactory = defaultsFactory ?? (() => new T());
-            _base = new SettingsProfileManagerBase<SettingsProfile<T>>(profileName,
-                name => new SettingsProfile<T>(name, _defaultsFactory));
-        }
+        public SettingsProfileManager(string name) =>
+            _base = new SettingsProfileManagerBase<SettingsProfile<T>>(name, n => new SettingsProfile<T>(n));
 
-        public SettingsProfile<T> GetProfile(string profileName) =>
-            _base.GetProfile(profileName);
+        public SettingsProfile<T> GetProfile(string name) =>
+            _base.GetProfile(name);
 
         public SettingsProfile<T> GetCurrentProfile() =>
             _base.GetCurrentProfile();
 
-        public void SetCurrentProfile(string profileName, bool loadIfNeeded = true) =>
-            _base.SetCurrentProfile(
-                profileName,
-                loadIfNeeded,
-                p => p.GetValue());
+        public void SetCurrentProfile(string profileName, bool load = true) =>
+            _base.SetCurrentProfile(profileName, load, p => p.Load());
     }
 
     internal sealed class SettingsProfileManagerBase<TProfile>
@@ -70,24 +61,22 @@ namespace UnityEssentials
         public SettingsProfileManagerBase(string profileName, Func<string, TProfile> createProfile)
         {
             _createProfile = createProfile ?? throw new ArgumentNullException(nameof(createProfile));
-            CurrentProfileName = SettingsProfileCacheUtility.SanitizeName(profileName);
+            CurrentProfileName = SettingsCacheUtility.SanitizeName(profileName);
         }
 
         public TProfile GetProfile(string profileName)
         {
-            var name = SettingsProfileCacheUtility.SanitizeName(profileName);
-            return SettingsProfileCacheUtility.GetOrCreate(_profiles, name, () => _createProfile(name));
+            var name = SettingsCacheUtility.SanitizeName(profileName);
+            return SettingsCacheUtility.GetOrCreate(_profiles, name, () => _createProfile(name));
         }
 
         public TProfile GetCurrentProfile() =>
             GetProfile(CurrentProfileName);
 
-        public void SetCurrentProfile(string profileName, bool loadIfNeeded, Action<TProfile> loadIfNeededAction)
+        public void SetCurrentProfile(string profileName, bool load, Action<TProfile> loadAction)
         {
-            CurrentProfileName = SettingsProfileCacheUtility.SanitizeName(profileName);
-
-            if (loadIfNeeded)
-                loadIfNeededAction?.Invoke(GetCurrentProfile());
+            CurrentProfileName = SettingsCacheUtility.SanitizeName(profileName);
+            if (load) loadAction?.Invoke(GetCurrentProfile());
         }
     }
 }

@@ -8,18 +8,24 @@ namespace UnityEssentials
 
     public sealed class SettingsProfile : SettingsProfile<SettingsProfileBase>
     {
-        public SettingsProfile(string profileName) : base(profileName, () => new SettingsProfileBase()) { }
-        
-        public new SettingsProfileBase GetOrLoad() =>
-            base.GetValue(markDirty: false, notify: false);
-        
+        public new static SettingsProfile GetOrCreate(string name = "Default") =>
+            SettingsProfileRegistry.GetOrCreate(name, n => new SettingsProfile(n));
+
+        public SettingsProfile(string name) : base(name) { }
+
+        public new SettingsProfileBase GetValue(bool markDirty = true, bool notify = true) =>
+            base.GetValue(markDirty, notify);
+
         public new SettingsProfileBase Load() =>
             base.Load();
     }
 
     public class SettingsProfile<T> where T : new()
     {
-        public string ProfileName { get; }
+        public string ProfileName { get; private set; }
+        
+        public static SettingsProfile<T> GetOrCreate(string name = "Default") =>
+            SettingsProfileRegistry.GetOrCreate(name, n => new SettingsProfile<T>(n));
 
         /// <summary>
         /// Read access. Ensures the profile is loaded.
@@ -40,17 +46,20 @@ namespace UnityEssentials
 
         public event Action<T> OnChanged;
 
-        private readonly Func<T> _defaultsFactory;
-        private readonly string _path;
+        private Func<T> _defaultsFactory;
+        private string _path;
 
         private bool _loaded;
         private bool _dirty;
         private T _value;
 
-        public SettingsProfile(string profileName, Func<T> defaultsFactory = null)
+        public SettingsProfile(string name) =>
+            Initialize(SettingsCacheUtility.SanitizeName(name));
+
+        private void Initialize(string sanitizedProfileName)
         {
-            ProfileName = string.IsNullOrWhiteSpace(profileName) ? "Default" : profileName.Trim();
-            _defaultsFactory = defaultsFactory ?? (() => new T());
+            ProfileName = sanitizedProfileName;
+            _defaultsFactory = () => new T();
             _path = SettingsPath.GetPath<T>(ProfileName);
         }
 
@@ -88,10 +97,10 @@ namespace UnityEssentials
                     var json = SettingsJsonStore.ReadAllText(_path);
                     var env = SettingsJson.Deserialize<SettingsEnvelope<T>>(json);
 
-                    if (env != null && env.data != null)
+                    if (env != null && env.Values != null)
                     {
-                        _value = env.data;
-                        ApplyValidationAndMigration(_value, env.schemaVersion);
+                        _value = env.Values;
+                        ApplyValidationAndMigration(_value, env.SchemaVersion);
                     }
                     else
                     {
