@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UnityEssentials.Samples
 {
-    public class GraphicsBoot : MonoBehaviour
+    public class SettingsProfileSample : MonoBehaviour
     {
         public static readonly SettingsProfile<GraphicsSettings> Graphics = new("Graphics");
         public static readonly SettingsProfileManager<GraphicsSettings> GraphicsManager = new("GraphicsManager");
@@ -12,17 +12,10 @@ namespace UnityEssentials.Samples
 
         private void Awake()
         {
-            UseGlobalSettingsService();
             UseTypedProfile();
             UseTypedProfileManager();
             UseValueProfile();
             UseValueProfileManager();
-        }
-
-        private static void UseGlobalSettingsService()
-        {
-            var windowModeGlobal = SettingsService.GetInt("window_mode", 3);
-            SettingsService.SetInt("window_mode", windowModeGlobal);
         }
 
         private static void UseTypedProfile()
@@ -73,7 +66,6 @@ namespace UnityEssentials.Samples
 
         private void OnApplicationQuit()
         {
-            SettingsService.Save();
             Graphics.SaveIfDirty();
             GraphicsManager?.GetCurrentProfile().SaveIfDirty();
             GraphicsDict.SaveIfDirty();

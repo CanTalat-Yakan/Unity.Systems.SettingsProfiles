@@ -2,7 +2,8 @@
     "name": "UnityEssentials.SettingsProfile",
     "rootNamespace": "UnityEssentials",
     "references": [
-        "UnityEssentials.SerializedDictionary"
+        "GUID:aa09701d312bf8847977605b156e47cc",
+        "GUID:ba233af9459ae120fa17ee4b9c745227"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

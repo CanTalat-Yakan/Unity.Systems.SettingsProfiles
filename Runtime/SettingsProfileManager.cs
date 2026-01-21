@@ -61,13 +61,13 @@ namespace UnityEssentials
         public SettingsProfileManagerBase(string profileName, Func<string, TProfile> createProfile)
         {
             _createProfile = createProfile ?? throw new ArgumentNullException(nameof(createProfile));
-            CurrentProfileName = SettingsCacheUtility.SanitizeName(profileName);
+            CurrentProfileName = SerializerCacheUtility.SanitizeName(profileName);
         }
 
         public TProfile GetProfile(string profileName)
         {
-            var name = SettingsCacheUtility.SanitizeName(profileName);
-            return SettingsCacheUtility.GetOrCreate(_profiles, name, () => _createProfile(name));
+            var name = SerializerCacheUtility.SanitizeName(profileName);
+            return SerializerCacheUtility.GetOrCreate(_profiles, name, () => _createProfile(name));
         }
 
         public TProfile GetCurrentProfile() =>
@@ -75,7 +75,7 @@ namespace UnityEssentials
 
         public void SetCurrentProfile(string profileName, bool load, Action<TProfile> loadAction)
         {
-            CurrentProfileName = SettingsCacheUtility.SanitizeName(profileName);
+            CurrentProfileName = SerializerCacheUtility.SanitizeName(profileName);
             if (load) loadAction?.Invoke(GetCurrentProfile());
         }
     }

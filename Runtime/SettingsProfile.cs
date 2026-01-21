@@ -54,13 +54,13 @@ namespace UnityEssentials
         private T _value;
 
         public SettingsProfile(string name) =>
-            Initialize(SettingsCacheUtility.SanitizeName(name));
+            Initialize(SerializerCacheUtility.SanitizeName(name));
 
         private void Initialize(string sanitizedProfileName)
         {
             ProfileName = sanitizedProfileName;
             _defaultsFactory = () => new T();
-            _path = SettingsPath.GetPath<T>(ProfileName);
+            _path = SerializerUtility.GetPath<T>(ProfileName);
         }
 
         /// <summary>
@@ -77,7 +77,6 @@ namespace UnityEssentials
 
         public T Load()
         {
-            // Unsubscribe old change hooks (in case Load is called after DeleteFile or manual reloads).
             UnhookChangeNotifications(_value);
 
             _value = _defaultsFactory();
@@ -85,7 +84,7 @@ namespace UnityEssentials
 
             bool dirty;
 
-            if (!SettingsJsonStore.Exists(_path))
+            if (!SerializerJsonStore.Exists(_path))
             {
                 dirty = true; // defaults need a first save if desired
             }
@@ -94,8 +93,8 @@ namespace UnityEssentials
                 dirty = false;
                 try
                 {
-                    var json = SettingsJsonStore.ReadAllText(_path);
-                    var env = SettingsJson.Deserialize<SettingsEnvelope<T>>(json);
+                    var json = SerializerJsonStore.ReadAllText(_path);
+                    var env = SerializerJson.Deserialize<SerializerEnvelope<T>>(json);
 
                     if (env != null && env.Values != null)
                     {
@@ -116,8 +115,6 @@ namespace UnityEssentials
             _loaded = true;
             _dirty = dirty;
 
-            // If the underlying value supports fine-grained change events (e.g. SerializedDictionary),
-            // hook them up so IsDirty/Changed stays correct even when callers only use Value.
             HookChangeNotifications(_value);
 
             return _value;
@@ -133,10 +130,10 @@ namespace UnityEssentials
             ApplyValidationAndMigration(Value, null);
 
             var schema = (Value is ISettingsVersioned sv) ? sv.SchemaVersion : 0;
-            var env = SettingsEnvelope<T>.Create(ProfileName, schema, Value);
+            var env = SerializerEnvelope<T>.Create(ProfileName, schema, Value);
 
-            var json = SettingsJson.Serialize(env);
-            SettingsJsonStore.WriteAllTextAtomic(_path, json);
+            var json = SerializerJson.Serialize(env);
+            SerializerJsonStore.WriteAllTextAtomic(_path, json);
             _dirty = false;
         }
 
@@ -159,7 +156,7 @@ namespace UnityEssentials
 
         public void DeleteFile()
         {
-            SettingsJsonStore.Delete(_path);
+            SerializerJsonStore.Delete(_path);
             UnhookChangeNotifications(_value);
             _loaded = false;
             _dirty = false;
@@ -177,14 +174,20 @@ namespace UnityEssentials
 
         private void HookChangeNotifications(T v)
         {
+            // Previously this only supported SerializedDictionary<string, JToken>.
+            // SettingsDefinition reuses SettingsProfile with a different value type, so we hook all string-key variant dictionaries.
             if (v is SerializedDictionary<string, JToken> dict)
                 dict.OnChanged += HandleDictionaryChanged;
+            else if (v is SerializedDictionary<string, object> objDict)
+                objDict.OnChanged += HandleDictionaryChanged;
         }
 
         private void UnhookChangeNotifications(T v)
         {
             if (v is SerializedDictionary<string, JToken> dict)
                 dict.OnChanged -= HandleDictionaryChanged;
+            else if (v is SerializedDictionary<string, object> objDict)
+                objDict.OnChanged -= HandleDictionaryChanged;
         }
 
         private void HandleDictionaryChanged(string _)

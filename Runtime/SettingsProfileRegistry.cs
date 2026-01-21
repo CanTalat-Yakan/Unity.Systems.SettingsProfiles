@@ -11,22 +11,21 @@ namespace UnityEssentials
     /// </summary>
     internal static class SettingsProfileRegistry
     {
-        private static readonly Dictionary<SettingsCacheUtility.CacheKey, object> s_cache = new();
-        private static readonly object s_lock = new();
+        private static readonly Dictionary<SerializerCacheUtility.CacheKey, object> Cache = new();
+        private static readonly object Lock = new();
 
         public static TProfile GetOrCreate<TProfile>(string name, Func<string, TProfile> create) where TProfile : class
         {
-            var sanitizedName = SettingsCacheUtility.SanitizeName(name);
-            var cacheKey = new SettingsCacheUtility.CacheKey(typeof(TProfile), sanitizedName);
-            var cacheObject =
-                SettingsCacheUtility.GetOrCreateLocked(s_lock, s_cache, cacheKey, () => create(sanitizedName));
+            var sanitizedName = SerializerCacheUtility.SanitizeName(name);
+            var cacheKey = new SerializerCacheUtility.CacheKey(typeof(TProfile), sanitizedName);
+            var cacheObject = SerializerCacheUtility.GetOrCreateLocked(Lock, Cache, cacheKey, () => create(sanitizedName));
             return (TProfile)cacheObject;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ClearCacheOnLoad()
         {
-            lock (s_lock) s_cache.Clear();
+            lock (Lock) Cache.Clear();
         }
     }
 }
