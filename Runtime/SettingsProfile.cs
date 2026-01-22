@@ -22,7 +22,7 @@ namespace UnityEssentials
 
     public class SettingsProfile<T> where T : new()
     {
-        public string ProfileName { get; private set; }
+        public string fileName { get; private set; }
         
         public static SettingsProfile<T> GetOrCreate(string name = "Default") =>
             SettingsProfileRegistry.GetOrCreate(name, n => new SettingsProfile<T>(n));
@@ -53,14 +53,14 @@ namespace UnityEssentials
         private bool _dirty;
         private T _value;
 
-        public SettingsProfile(string name) =>
-            Initialize(SerializerCacheUtility.SanitizeName(name));
+        public SettingsProfile(string name, string extension = "json") =>
+            Initialize(SerializerCacheUtility.SanitizeName(name), extension);
 
-        private void Initialize(string sanitizedProfileName)
+        private void Initialize(string name, string extension = null)
         {
-            ProfileName = sanitizedProfileName;
+            fileName = name;
             _defaultsFactory = () => new T();
-            _path = SerializerUtility.GetPath<T>(ProfileName);
+            _path = SerializerUtility.GetPath<T>(fileName, extension);
         }
 
         /// <summary>
@@ -130,7 +130,7 @@ namespace UnityEssentials
             ApplyValidationAndMigration(Value, null);
 
             var schema = (Value is ISettingsVersioned sv) ? sv.SchemaVersion : 0;
-            var env = SerializerEnvelope<T>.Create(ProfileName, schema, Value);
+            var env = SerializerEnvelope<T>.Create(fileName, schema, Value);
 
             var json = SerializerJson.Serialize(env);
             SerializerJsonStore.WriteAllTextAtomic(_path, json);
@@ -174,8 +174,6 @@ namespace UnityEssentials
 
         private void HookChangeNotifications(T v)
         {
-            // Previously this only supported SerializedDictionary<string, JToken>.
-            // SettingsDefinition reuses SettingsProfile with a different value type, so we hook all string-key variant dictionaries.
             if (v is SerializedDictionary<string, JToken> dict)
                 dict.OnChanged += HandleDictionaryChanged;
             else if (v is SerializedDictionary<string, object> objDict)
